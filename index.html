@@ -20,15 +20,13 @@ h3{font-size:14px;margin:16px 0 6px;color:var(--muted);font-weight:500}
 .gauge i{position:absolute;top:-4px;width:4px;height:18px;background:#fff;border-radius:2px;transform:translateX(-50%);transition:left .4s}
 .ctrl{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line)}
 .ctrl label{display:flex;gap:6px;align-items:center;color:var(--muted)}
-.sens{display:flex;flex-wrap:wrap;gap:8px 16px;padding:10px 16px;border-bottom:1px solid var(--line);background:#131a21}
-.sens-title{width:100%;color:var(--muted);font-size:12px}
-.sens label{display:flex;flex-direction:column;gap:2px;min-width:190px;color:var(--muted);font-size:12px}
-.sens label b{color:var(--text);font-size:13px}
 button{background:var(--accent);color:#fff;border:0;border-radius:6px;padding:6px 12px;cursor:pointer;white-space:nowrap}
 button.sub{background:#2a333d}
 select,input[type=range]{accent-color:var(--accent)}
 select{background:#0f1419;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:4px}
-.tablewrap{overflow:auto;max-height:calc(100vh - 230px)}
+.listwrap{display:grid;grid-template-columns:1fr 330px}
+@media(max-width:1000px){.listwrap{grid-template-columns:1fr}}
+.tablewrap{overflow:auto;max-height:calc(100vh - 170px)}
 table{width:100%;border-collapse:collapse}
 th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
 th{position:sticky;top:0;background:var(--panel);color:var(--muted);font-weight:500;font-size:12px}
@@ -41,6 +39,15 @@ td.l,th.l{text-align:left}
 .note{color:var(--muted);font-size:12px;line-height:1.7}
 details{padding:12px 16px;border-top:1px solid var(--line)}
 summary{cursor:pointer;color:var(--muted)}
+/* ニュース欄 */
+.news{border-left:1px solid var(--line);background:var(--panel);padding:12px 14px;max-height:calc(100vh - 170px);overflow:auto}
+.news-item{padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.news-item:hover{background:#1c2530}
+.news-item .meta{font-size:11px;color:var(--muted);margin-bottom:2px}
+.tag-p{color:var(--up);font-weight:600;margin-right:4px}
+.tag-n{color:var(--down);font-weight:600;margin-right:4px}
+.news-static .news-item{cursor:default}
+.news-static .news-item:hover{background:none}
 /* 詳細画面 */
 .dtop{padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
 .dgrid{display:grid;grid-template-columns:1fr 1.4fr 1fr;gap:14px;padding:14px 16px}
@@ -82,33 +89,38 @@ canvas{width:100%;height:280px;display:block;background:#0c1116;border-radius:8p
       <option value="bust">不況固定</option>
     </select></label>
     <label>景気感応度（全体倍率） <input id="econGain" type="range" min="0" max="60" value="25"> <span id="econLbl">0.25</span></label>
+    <label>ニュース頻度 <input id="newsProb" type="range" min="0" max="10" value="2"> <span id="newsLbl">2%/日</span></label>
     <label>利益率の重み <input id="marginW" type="range" min="0" max="100" value="60"> <span id="marginLbl">60%</span></label>
     <label>利益ベースの時価総額の重み <input id="peW" type="range" min="0" max="100" value="70"> <span id="peLbl">70%</span></label>
     <label><input type="checkbox" id="showNeg"> 赤字企業を含める</label>
   </div>
 
-  <div class="sens">
-    <div class="sens-title">業種別の景気感応度 β（大きいほど景気の影響を受けやすい。0.0〜2.0）</div>
-    <div id="sensPanel" style="display:contents"></div>
-  </div>
+  <div class="listwrap">
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="l">会社名</th><th class="l">業種</th><th>株価(CP)</th><th>時価総額(億CP)</th>
+            <th>上場市場</th><th>1株配当(CP)</th><th>配当利回り</th><th>直近騰落</th><th>需要スコア</th>
+            <th>売上(億CP)</th><th>利益(億CP)</th><th>利益率</th><th>営業係数</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
 
-  <div class="tablewrap">
-    <table>
-      <thead>
-        <tr>
-          <th class="l">会社名</th><th class="l">業種</th><th>株価(CP)</th><th>時価総額(億CP)</th>
-          <th>上場市場</th><th>1株配当(CP)</th><th>配当利回り</th><th>直近騰落</th><th>需要スコア</th>
-          <th>売上(億CP)</th><th>利益(億CP)</th><th>利益率</th><th>営業係数</th><th></th>
-        </tr>
-      </thead>
-      <tbody id="tbody"></tbody>
-    </table>
+    <aside class="news">
+      <h3 style="margin-top:0">ニュース</h3>
+      <div class="note" style="margin-bottom:6px">各社は毎日一定の確率でニュースが出ます。好材料は買い意欲、悪材料は売り意欲を高めます。項目をクリックすると詳細へ移ります。</div>
+      <div id="newsList"></div>
+    </aside>
   </div>
 
   <details>
     <summary>モデルの仕組み・データ注記</summary>
     <div class="note" style="margin-top:8px">
-      ・<b>景気感応度 β</b>：業種ごとに設定。景気指数が +1 のとき、適正株価は約 exp(β × 景気感応度) 倍になります。テクノロジーは景気に左右されやすく、鉄道は左右されにくい値を初期設定にしています（テクノロジー1.5、運輸1.0、一般私鉄0.5、大手私鉄0.4、SR0.3、第三種事業者0.2）。β は一覧上部のスライダーで変更できます。<br>
+      ・<b>景気感応度 β</b>：業種ごとに固定。テクノロジー1.5、運輸1.0、一般私鉄0.5、大手私鉄0.4、SR0.3、第三種事業者0.2。景気指数が +1 のとき適正株価は約 exp(β × 景気感応度) 倍になります。<br>
+      ・<b>ニュース</b>：各社は毎日「ニュース頻度」の確率で、業種別の好材料・悪材料のどちらかが出ます。影響の大きさは 0.5〜1.0。影響は時間とともに 15%ずつ減衰します。ニュースの影響は需要スコアに加わり、株価の動きを左右します。<br>
       ・<b>時価総額の推定</b>：業種ごとの PER と PSR から「利益×PER」と「売上×PSR」を算出し、重みをつけて合成。利益が赤字の企業は売上ベースのみ（割引あり）。<br>
       ・<b>基準株価</b>：企業の規模とは関係なく 300〜10,000CP の範囲でランダムに割り振り、ファイルに収録した値を使用。<br>
       ・<b>発行株式数</b>：「推定時価総額 ÷ 基準株価」で企業ごとに逆算（億株）。<br>
@@ -116,9 +128,9 @@ canvas{width:100%;height:280px;display:block;background:#0c1116;border-radius:8p
       ・<b>配当</b>：年間配当総額 ＝ 利益 × 配当性向（赤字は無配）。1株配当 ＝ 配当総額 ÷ 発行株式数。配当利回り ＝ 1株配当 ÷ 現在の株価。<br>
       ・<b>上場市場</b>：売上 10,000億CP以上（大型）・3,000億CP以上（中型）はプライム、それ未満（小型）はスタンダード。<br>
       ・<b>景気</b>：景気指数が β に応じて適正株価を動かす。景気は自動で好況・通常・不況を遷移。<br>
-      ・<b>需要スコア</b>：50 + 50 × tanh(構造 + 景気 + 割安度)。<br>
+      ・<b>需要スコア</b>：50 + 50 × tanh(構造 + 景気 + 割安度 + ニュース)。<br>
       ・<b>株価の変動</b>：毎日 λ×割安度 + μ×需要 + ノイズで変動。株価は 100〜12,000CP に制限。<br><br>
-      ※ PER・PSR・配当性向の基礎値・β・基準株価はいずれも仮置きの値です。コード内の <code>SECTOR</code> と <code>COMPANIES</code> で変更できます。<br>
+      ※ PER・PSR・配当性向の基礎値・β・基準株価・ニュースの文面はいずれも仮置きです。コード内の <code>SECTOR</code>・<code>NEWS</code>・<code>COMPANIES</code> で変更できます。<br>
       ※ 売上・利益が空欄の企業（製造2社、多くの鉄道会社）は対象外。御川縣鐡は売上96・利益−1,859の極端な赤字のため、「赤字企業を含める」をオンにしたときのみ対象になります。
     </div>
   </details>
@@ -143,6 +155,8 @@ canvas{width:100%;height:280px;display:block;background:#0c1116;border-radius:8p
       </div>
       <canvas id="chart"></canvas>
       <div class="note">チャート上にカーソルを合わせると、その時点の株価と市場指数を表示します。<br>色付きの線：株価（開始=100） ／ 灰色の線：市場指数（売上加重）</div>
+      <h3>この企業のニュース</h3>
+      <div id="dNews" class="news-static"></div>
     </div>
 
     <div class="card">
@@ -181,7 +195,7 @@ const COMPANIES = [
   {id:27, name:'東連合急行',               reading:'ひがしれんごうきゅうこう', owner:'tamakomugi',  founded:'2026/09/29', sector:'大手私鉄',     sales:5933,  profit:1009,  basePrice:1380, opRatio:83},
 ];
 
-/* ===== 業種ごとの設定（PER・PSR・配当性向の基礎値・景気感応度β） ===== */
+/* ===== 業種ごとの設定（PER・PSR・配当性向の基礎値・景気感応度β。β は固定値） ===== */
 const SECTOR = {
   'テクノロジー': {per:25, psr:4.0, payout:0.15, beta:1.5},  // 景気に左右されやすい
   '製造':         {per:12, psr:0.8, payout:0.35, beta:1.1},
@@ -191,6 +205,35 @@ const SECTOR = {
   'SR':           {per:15, psr:1.8, payout:0.40, beta:0.3},
   '第三種事業者': {per:12, psr:1.0, payout:0.30, beta:0.2},
 };
+
+/* ===== 業種別のニュース（{n} は社名に置き換え） ===== */
+const NEWS = {
+  'テクノロジー': {
+    pos:['{n}、新製品の予約が想定を上回る','{n}、大型の法人契約を獲得','{n}、主力サービスの利用者数が急増','{n}、海外企業との提携を発表'],
+    neg:['{n}、主力製品に不具合 出荷を一時停止','{n}、有力エンジニアの退社が相次ぐ','{n}、大型案件の受注が延期に','{n}、競合の新製品に顧客を奪われる'],
+  },
+  '運輸': {
+    pos:['{n}、貨物量が前年を大きく上回る','{n}、新規の物流契約を獲得','{n}、燃料費の低下でコストが改善'],
+    neg:['{n}、燃料費の高騰が採算を圧迫','{n}、大型車両の不具合で運休が発生','{n}、荷動きの鈍化で減便を発表'],
+  },
+  'SR': {
+    pos:['{n}、沿線の観光需要が好調','{n}、新駅周辺の開発が完成','{n}、利用者数が過去最高を更新'],
+    neg:['{n}、大雨の影響で長期運休','{n}、設備更新費用が増加','{n}、沿線人口の減少が続く'],
+  },
+  '大手私鉄': {
+    pos:['{n}、沿線に大型商業施設が開業','{n}、通勤需要の回復が鮮明に','{n}、運賃改定の認可を取得'],
+    neg:['{n}、車両故障で大規模な遅延が発生','{n}、人件費の上昇が利益を圧迫','{n}、沿線の大型開発計画が中止'],
+  },
+  '一般私鉄': {
+    pos:['{n}、地域イベントで乗客が増加','{n}、観光列車の運行が好評'],
+    neg:['{n}、沿線の工場閉鎖で利用者が減少','{n}、設備の老朽化で修繕費が増加'],
+  },
+  '第三種事業者': {
+    pos:['{n}、新規の業務提携が成立','{n}、補助金の交付が決定'],
+    neg:['{n}、主要取引先の業績悪化','{n}、施設の老朽化で点検費が増加'],
+  },
+};
+
 const CFG = {
   priceFloor:100, priceCap:12000,   // 株価の制限
   peWeight:0.7,                     // 利益ベース時価総額の重み（残りは売上ベース）
@@ -198,6 +241,9 @@ const CFG = {
   payoutJitter:0.10,                // 配当性向のばらつき幅（±5ポイント）
   lambda:0.08, mu:0.01, fundGain:0.25,
   econGain:0.25,                    // 景気感応度の全体倍率（β に掛かる）
+  newsProb:0.02,                    // 各社が1日にニュースになる確率
+  newsDecay:0.85,                   // ニュース影響の1日あたりの残存率
+  newsWeight:0.6,                   // ニュース影響が需要スコアに与える重み
 };
 const P = {marginW:0.6, peW:0.7, showNeg:false, regime:'auto'};
 
@@ -209,7 +255,8 @@ function randn(){ let u=0,v=0; while(!u)u=rnd(); while(!v)v=rnd(); return Math.s
 function seededUnit(n){ let t=(n|0)+0x6D2B79F5|0; t=Math.imul(t^t>>>15,1|t); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }
 
 /* ===== 状態・補助 ===== */
-const S = {view:'list', E:0, target:0, tick:0, stocks:[], idxHist:[100], selected:null, running:true, hold:false, hoverX:null};
+const S = {view:'list', E:0, target:0, tick:0, stocks:[], idxHist:[100], newsLog:[], newsShown:-1,
+           selected:null, running:true, hold:false, hoverX:null};
 const $ = id => document.getElementById(id);
 const fmt = n => Math.round(n).toLocaleString('ja-JP');
 const fmt2 = n => n.toFixed(2);
@@ -230,13 +277,30 @@ function stepEconomy(){
   S.E = Math.max(-1, Math.min(1, S.E + 0.15*(S.target - S.E) + 0.06*randn()));
 }
 
-/* ===== 需要・適正株価（業種の景気感応度 β を使用） ===== */
+/* ===== 需要・適正株価（業種の β・ニュースの影響を使用） ===== */
 function signals(s, E){
   s.fair   = s.base * Math.exp(CFG.fundGain*s.c + s.beta*CFG.econGain*E);
   s.gap    = Math.log(s.fair / s.price);
   s.cyc    = s.beta * E;
-  s.raw    = 0.5*s.c + 0.5*s.cyc + 0.8*s.gap;
+  s.newsEff= CFG.newsWeight * s.news;
+  s.raw    = 0.5*s.c + 0.5*s.cyc + 0.8*s.gap + s.newsEff;
   s.demand = 50 + 50*Math.tanh(s.raw);
+}
+
+/* ===== ニュース ===== */
+function pushNews(item){
+  S.newsLog.push(item);
+  if(S.newsLog.length>300) S.newsLog.shift();
+}
+function maybeNews(s){
+  if(rnd()>=CFG.newsProb) return;
+  const pos = rnd()<0.5;
+  const list = NEWS[s.sector][pos?'pos':'neg'];
+  const text = list[Math.floor(rnd()*list.length)].replace('{n}', s.name);
+  const mag = 0.5 + 0.5*rnd();                       // 影響の大きさ 0.5〜1.0
+  const impact = (pos?1:-1)*mag;
+  s.news += impact;
+  pushNews({day:S.tick+1, id:s.id, name:s.name, pos, text, impact});
 }
 
 /* ===== 時価総額の推定（売上・利益・業種倍率から） ===== */
@@ -282,6 +346,7 @@ function buildStocks(){
     s.payout = payoutFor(s);
     s.div = estimateDividend(s);
     s.sigma = 0.006*s.beta + 0.004;
+    s.news = 0;
     s.hist = [s.price];
     s.ret = 0; s.prev = s.price;
   });
@@ -302,6 +367,10 @@ const yieldOf = s => s.div.dps / s.price;   // 配当利回り
 function stepStocks(){
   stepEconomy();
   S.stocks.forEach(s=>{
+    s.news *= CFG.newsDecay;                          // 過去のニュースの影響は徐々に薄れる
+    maybeNews(s);                                     // 今日のニュース（低確率）
+  });
+  S.stocks.forEach(s=>{
     signals(s, S.E);
     const ret = CFG.lambda*s.gap + CFG.mu*s.raw + s.sigma*randn();
     s.prev = s.price;
@@ -314,26 +383,6 @@ function stepStocks(){
   S.tick++;
   S.idxHist.push(indexValue()); if(S.idxHist.length>300) S.idxHist.shift();
 }
-
-/* ===== 業種別の景気感応度スライダー ===== */
-function buildSensPanel(){
-  const secs = [...new Set(COMPANIES.map(c=>c.sector))].filter(x=>SECTOR[x]);
-  $('sensPanel').innerHTML = secs.map(sec=>`
-    <label>${sec}　<b data-val="${sec}">${SECTOR[sec].beta.toFixed(1)}</b>
-      <input type="range" min="0" max="20" value="${Math.round(SECTOR[sec].beta*10)}" data-sec="${sec}">
-    </label>`).join('');
-}
-$('sensPanel').addEventListener('input', e=>{
-  const sec = e.target.dataset.sec; if(!sec) return;
-  const beta = +e.target.value/10;
-  SECTOR[sec].beta = beta;
-  document.querySelector(`[data-val="${sec}"]`).textContent = beta.toFixed(1);
-  S.stocks.forEach(s=>{
-    if(s.sector===sec){ s.beta = beta; s.sigma = 0.006*beta + 0.004; }
-  });
-  S.stocks.forEach(s=>signals(s,S.E));
-  render();
-});
 
 /* ===== 一覧（行は一度だけ作り、以後は中身だけ更新） ===== */
 function buildTable(){
@@ -383,6 +432,19 @@ function updateTable(){
   }
 }
 
+/* ===== ニュース欄 ===== */
+const newsHTML = (n, clickable) => `
+  <div class="news-item" ${clickable?`data-detail="${n.id}"`:''}>
+    <div class="meta">${n.day}日目 ｜ ${n.name}</div>
+    <div><span class="${n.pos?'tag-p':'tag-n'}">${n.pos?'好材料':'悪材料'}</span>${n.text}</div>
+  </div>`;
+
+function renderNews(){
+  $('newsList').innerHTML = S.newsLog.slice().reverse().slice(0,60).map(n=>newsHTML(n,true)).join('')
+    || '<div class="note">まだニュースはありません。</div>';
+  S.newsShown = S.newsLog.length;
+}
+
 /* ===== 詳細 ===== */
 function renderDetail(){
   const s = S.stocks.find(x=>x.id===S.selected);
@@ -405,7 +467,7 @@ function renderDetail(){
     ['利益（億CP）', fmt(s.profit)],
     ['利益率', pct(s.profit/s.sales)],
     ['営業係数', s.opRatio ?? 'データなし'],
-    ['景気感応度 β（業種設定）', s.beta.toFixed(1), 'total'],
+    ['景気感応度 β（業種の固定値）', s.beta.toFixed(1), 'total'],
     ['景気が好況（+1）のときの適正株価', signPct(upMove), upMove>=0?'up':'down'],
     ['景気が不況（-1）のときの適正株価', signPct(dnMove), dnMove>=0?'up':'down'],
   ]);
@@ -437,9 +499,15 @@ function renderDetail(){
     ['構造的な強さ（利益率・規模）', 0.5*s.c],
     ['景気の影響（β × 景気）',        0.5*s.cyc],
     ['割安度（適正株価との乖離）',    0.8*s.gap],
+    ['ニュースの影響（直近の材料）',  s.newsEff],
   ];
   $('dBreak').innerHTML = kv(parts.map(([k,v])=>[k, (v>=0?'+':'')+v.toFixed(2), v>=0?'up':'down']))
     + kv([['合計（tanh前）', s.raw.toFixed(2), 'total'], ['需要スコア', s.demand.toFixed(1), 'total']]);
+
+  const mine = S.newsLog.filter(n=>n.id===s.id).slice(-8).reverse();
+  $('dNews').innerHTML = mine.length
+    ? mine.map(n=>newsHTML(n,false)).join('')
+    : '<div class="note">この企業のニュースはまだありません。</div>';
 
   drawChart(s);
 }
@@ -517,6 +585,7 @@ function renderHeader(){
 
 function render(){
   renderHeader();
+  if(S.newsLog.length!==S.newsShown) renderNews();
   if(S.view==='list') updateTable();
   else renderDetail();
 }
@@ -533,6 +602,7 @@ function showView(v){
 /* ===== 制御 ===== */
 function init(){
   seed = 20261018; S.E = 0; S.target = 0; S.tick = 0; S.idxHist = [100];
+  S.newsLog = []; S.newsShown = -1;
   buildStocks(); buildTable(); render();
 }
 let timer=null, speed=3;
@@ -545,6 +615,12 @@ function restartTimer(){
 $('tbody').addEventListener('click', e=>{
   const btn = e.target.closest('[data-detail]'); if(!btn) return;
   S.selected = +btn.dataset.detail;
+  showView('detail');
+});
+// ニュースからの詳細移動
+$('newsList').addEventListener('click', e=>{
+  const el = e.target.closest('[data-detail]'); if(!el) return;
+  S.selected = +el.dataset.detail;
   showView('detail');
 });
 // 押下中は並べ替えを止める
@@ -576,12 +652,12 @@ $('btnReset').onclick = init;
 $('speed').oninput = e=>{ speed=+e.target.value; $('speedLbl').textContent = speed+' 日/秒'; restartTimer(); };
 $('regime').onchange = e=>{ P.regime = e.target.value; };
 $('econGain').oninput = e=>{ CFG.econGain = +e.target.value/100; $('econLbl').textContent = CFG.econGain.toFixed(2); S.stocks.forEach(s=>signals(s,S.E)); render(); };
+$('newsProb').oninput = e=>{ CFG.newsProb = +e.target.value/100; $('newsLbl').textContent = e.target.value+'%/日'; };
 $('marginW').oninput = e=>{ P.marginW = +e.target.value/100; $('marginLbl').textContent = e.target.value+'%'; init(); };
 $('peW').oninput = e=>{ P.peW = +e.target.value/100; $('peLbl').textContent = e.target.value+'%'; init(); };
 $('showNeg').onchange = e=>{ P.showNeg = e.target.checked; init(); };
 window.addEventListener('resize', ()=>{ if(S.view==='detail') renderDetail(); });
 
-buildSensPanel();
 init();
 restartTimer();
 </script>
