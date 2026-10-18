@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>星陽ワールド 株価シミュレーター</title>
+<style>
+:root{--bg:#0f1419;--panel:#171e26;--line:#2a333d;--text:#e6e9ee;--muted:#8a95a3;--up:#34c77b;--down:#ff5c6c;--accent:#4ea1ff}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Hiragino Sans","Yu Gothic",sans-serif;background:var(--bg);color:var(--text);font-size:14px}
+header{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+h1{font-size:16px;margin:0;margin-right:auto}
+h2{font-size:17px;margin:0 0 4px}
+h3{font-size:14px;margin:16px 0 6px;color:var(--muted);font-weight:500}
+.kpi{display:flex;flex-direction:column}
+.kpi span{color:var(--muted);font-size:11px}
+.kpi b{font-size:17px}
+.gbox{width:180px}
+.gauge{height:10px;background:linear-gradient(90deg,#ff5c6c,#2a333d 50%,#34c77b);border-radius:5px;position:relative;margin-top:8px}
+.gauge i{position:absolute;top:-4px;width:4px;height:18px;background:#fff;border-radius:2px;transform:translateX(-50%);transition:left .4s}
+.ctrl{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line)}
+.ctrl label{display:flex;gap:6px;align-items:center;color:var(--muted)}
+.sens{display:flex;flex-wrap:wrap;gap:8px 16px;padding:10px 16px;border-bottom:1px solid var(--line);background:#131a21}
+.sens-title{width:100%;color:var(--muted);font-size:12px}
+.sens label{display:flex;flex-direction:column;gap:2px;min-width:190px;color:var(--muted);font-size:12px}
+.sens label b{color:var(--text);font-size:13px}
+button{background:var(--accent);color:#fff;border:0;border-radius:6px;padding:6px 12px;cursor:pointer;white-space:nowrap}
+button.sub{background:#2a333d}
+select,input[type=range]{accent-color:var(--accent)}
+select{background:#0f1419;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:4px}
+.tablewrap{overflow:auto;max-height:calc(100vh - 230px)}
+table{width:100%;border-collapse:collapse}
+th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th{position:sticky;top:0;background:var(--panel);color:var(--muted);font-weight:500;font-size:12px}
+td.l,th.l{text-align:left}
+.up{color:var(--up)} .down{color:var(--down)} .muted{color:var(--muted)}
+.bar{height:6px;background:#2a333d;border-radius:3px;width:60px;display:inline-block;vertical-align:middle;margin-left:6px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent)}
+.mkt-p{color:#ffd166}
+.mkt-s{color:#8ecaff}
+.note{color:var(--muted);font-size:12px;line-height:1.7}
+details{padding:12px 16px;border-top:1px solid var(--line)}
+summary{cursor:pointer;color:var(--muted)}
+/* 詳細画面 */
+.dtop{padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+.dgrid{display:grid;grid-template-columns:1fr 1.4fr 1fr;gap:14px;padding:14px 16px}
+@media(max-width:1000px){.dgrid{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:10px 0}
+.kpis div{background:#0f1419;border-radius:8px;padding:8px 10px}
+.kpis span{display:block;color:var(--muted);font-size:11px}
+.kpis b{font-size:18px}
+table.kv th{position:static;text-align:left;background:none;color:var(--muted);font-weight:400;width:52%;border-bottom:1px dashed var(--line)}
+table.kv td{text-align:right;border-bottom:1px dashed var(--line)}
+table.kv tr.total th,table.kv tr.total td{color:var(--text);font-weight:600}
+canvas{width:100%;height:280px;display:block;background:#0c1116;border-radius:8px;cursor:crosshair;touch-action:none}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>星陽ワールド 株価シミュレーター</h1>
+  <div class="kpi"><span>景気指数（-1〜+1）</span><b id="kE">0.00</b></div>
+  <div class="kpi"><span>景気の状態</span><b id="kLabel">通常</b></div>
+  <div class="kpi"><span>市場指数（開始=100）</span><b id="kIdx">100.0</b></div>
+  <div class="kpi"><span>合計時価総額（億CP）</span><b id="kTotal">0</b></div>
+  <div class="kpi"><span>経過日数</span><b id="kTick">0</b></div>
+  <div class="kpi gbox"><span>景気ゲージ</span><div class="gauge"><i id="gaugeMark" style="left:50%"></i></div></div>
+</header>
+
+<!-- ===== 銘柄一覧画面 ===== -->
+<section id="viewList">
+  <div class="ctrl">
+    <button id="btnPlay">一時停止</button>
+    <button id="btnStep" class="sub">1日進める</button>
+    <button id="btnReset" class="sub">初期化</button>
+    <label>速度 <input id="speed" type="range" min="1" max="20" value="3"> <span id="speedLbl">3 日/秒</span></label>
+    <label>景気 <select id="regime">
+      <option value="auto">自動</option>
+      <option value="boom">好況固定</option>
+      <option value="normal">通常固定</option>
+      <option value="bust">不況固定</option>
+    </select></label>
+    <label>景気感応度（全体倍率） <input id="econGain" type="range" min="0" max="60" value="25"> <span id="econLbl">0.25</span></label>
+    <label>利益率の重み <input id="marginW" type="range" min="0" max="100" value="60"> <span id="marginLbl">60%</span></label>
+    <label>利益ベースの時価総額の重み <input id="peW" type="range" min="0" max="100" value="70"> <span id="peLbl">70%</span></label>
+    <label><input type="checkbox" id="showNeg"> 赤字企業を含める</label>
+  </div>
+
+  <div class="sens">
+    <div class="sens-title">業種別の景気感応度 β（大きいほど景気の影響を受けやすい。0.0〜2.0）</div>
+    <div id="sensPanel" style="display:contents"></div>
+  </div>
+
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr>
+          <th class="l">会社名</th><th class="l">業種</th><th>株価(CP)</th><th>時価総額(億CP)</th>
+          <th>上場市場</th><th>1株配当(CP)</th><th>配当利回り</th><th>直近騰落</th><th>需要スコア</th>
+          <th>売上(億CP)</th><th>利益(億CP)</th><th>利益率</th><th>営業係数</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <details>
+    <summary>モデルの仕組み・データ注記</summary>
+    <div class="note" style="margin-top:8px">
+      ・<b>景気感応度 β</b>：業種ごとに設定。景気指数が +1 のとき、適正株価は約 exp(β × 景気感応度) 倍になります。テクノロジーは景気に左右されやすく、鉄道は左右されにくい値を初期設定にしています（テクノロジー1.5、運輸1.0、一般私鉄0.5、大手私鉄0.4、SR0.3、第三種事業者0.2）。β は一覧上部のスライダーで変更できます。<br>
+      ・<b>時価総額の推定</b>：業種ごとの PER と PSR から「利益×PER」と「売上×PSR」を算出し、重みをつけて合成。利益が赤字の企業は売上ベースのみ（割引あり）。<br>
+      ・<b>基準株価</b>：企業の規模とは関係なく 300〜10,000CP の範囲でランダムに割り振り、ファイルに収録した値を使用。<br>
+      ・<b>発行株式数</b>：「推定時価総額 ÷ 基準株価」で企業ごとに逆算（億株）。<br>
+      ・<b>配当性向</b>：業種の基礎値 ＋ 企業ごとの乱数（±5ポイント、シード固定で再現可能）。<br>
+      ・<b>配当</b>：年間配当総額 ＝ 利益 × 配当性向（赤字は無配）。1株配当 ＝ 配当総額 ÷ 発行株式数。配当利回り ＝ 1株配当 ÷ 現在の株価。<br>
+      ・<b>上場市場</b>：売上 10,000億CP以上（大型）・3,000億CP以上（中型）はプライム、それ未満（小型）はスタンダード。<br>
+      ・<b>景気</b>：景気指数が β に応じて適正株価を動かす。景気は自動で好況・通常・不況を遷移。<br>
+      ・<b>需要スコア</b>：50 + 50 × tanh(構造 + 景気 + 割安度)。<br>
+      ・<b>株価の変動</b>：毎日 λ×割安度 + μ×需要 + ノイズで変動。株価は 100〜12,000CP に制限。<br><br>
+      ※ PER・PSR・配当性向の基礎値・β・基準株価はいずれも仮置きの値です。コード内の <code>SECTOR</code> と <code>COMPANIES</code> で変更できます。<br>
+      ※ 売上・利益が空欄の企業（製造2社、多くの鉄道会社）は対象外。御川縣鐡は売上96・利益−1,859の極端な赤字のため、「赤字企業を含める」をオンにしたときのみ対象になります。
+    </div>
+  </details>
+</section>
+
+<!-- ===== 銘柄詳細画面 ===== -->
+<section id="viewDetail" hidden>
+  <div class="dtop"><button id="btnBack" class="sub">← 銘柄一覧に戻る</button></div>
+  <div class="dgrid">
+    <div class="card">
+      <h2 id="dName"></h2>
+      <div class="muted" id="dReading" style="margin-bottom:10px"></div>
+      <table class="kv" id="dData"></table>
+    </div>
+
+    <div class="card">
+      <div class="kpis">
+        <div><span>株価（CP）</span><b id="dPrice">-</b></div>
+        <div><span>時価総額（億CP）</span><b id="dMc">-</b></div>
+        <div><span>1株配当（CP）／ 配当利回り</span><b id="dDiv">-</b></div>
+        <div><span>上場市場 ／ 時価総額順位</span><b id="dMarket">-</b></div>
+      </div>
+      <canvas id="chart"></canvas>
+      <div class="note">チャート上にカーソルを合わせると、その時点の株価と市場指数を表示します。<br>色付きの線：株価（開始=100） ／ 灰色の線：市場指数（売上加重）</div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">時価総額の推定</h3>
+      <table class="kv" id="dEst"></table>
+      <h3>配当の推定</h3>
+      <table class="kv" id="dDivTbl"></table>
+      <h3>需要スコアの内訳</h3>
+      <table class="kv" id="dBreak"></table>
+    </div>
+  </div>
+</section>
+
+<script>
+/* ===== データ（星陽ワールド総合データより、売上・利益が入っている企業のみ）
+   basePrice：基準株価（規模とは無関係に 300〜10,000CP の範囲でランダムに割り振った収録値） ===== */
+const COMPANIES = [
+  {id:1,  name:'ブルーティック株式会社',   reading:'ぶるーてぃっく',           owner:'Yume_AK',     founded:'2022/05/10', sector:'テクノロジー', sales:5686,  profit:509,   basePrice:8610},
+  {id:2,  name:'ミルテクノロジー株式会社', reading:'みるてくのろじー',         owner:'Yume_AK',     founded:'2026/02/05', sector:'テクノロジー', sales:19367, profit:3026,  basePrice:2250},
+  {id:3,  name:'簓電装株式会社',           reading:'ささらでんそう',           owner:'Yume_AK',     founded:'2026/05/18', sector:'テクノロジー', sales:1039,  profit:204,   basePrice:7880},
+  {id:4,  name:'BUMOS株式会社',            reading:'ばーもす',                 owner:'Yume_AK',     founded:'2026/08/29', sector:'テクノロジー', sales:805,   profit:33,    basePrice:8680},
+  {id:5,  name:'レモネード株式会社',       reading:'れもねーど',               owner:'Rensye040',   founded:'未登録',     sector:'テクノロジー', sales:1135,  profit:285,   basePrice:5170},
+  {id:8,  name:'エアロ株式会社',           reading:'えあろ',                   owner:'tamakomugi',  founded:'2022/09/01', sector:'運輸',         sales:10332, profit:762,   basePrice:5590},
+  {id:9,  name:'SR珱羽支社',               reading:'えいはししゃ',             owner:'共同',        founded:'2026/09/20', sector:'SR',           sales:30984, profit:8985,  basePrice:1420, opRatio:71, region:0},
+  {id:10, name:'SR城山支社',               reading:'しろやまししゃ',           owner:'tamakomugi',  founded:'2026/09/20', sector:'SR',           sales:17633, profit:2998,  basePrice:2440, opRatio:83, region:6},
+  {id:11, name:'SR白木支社',               reading:'しろきししゃ',             owner:'tamakomugi',  founded:'2026/09/20', sector:'SR',           sales:23312, profit:5828,  basePrice:840,  opRatio:75, region:5},
+  {id:12, name:'白木鉄道',                 reading:'しろきてつどう',           owner:'tamakomugi',  founded:'2026/09/20', sector:'大手私鉄',     sales:4324,  profit:822,   basePrice:2940, opRatio:81},
+  {id:15, name:'科山鉄道',                 reading:'しなやまてつどう',         owner:'tamakomugi',  founded:'2026/09/22', sector:'大手私鉄',     sales:4472,  profit:313,   basePrice:5880, opRatio:93},
+  {id:16, name:'白木メトロ',               reading:'しろきめとろ',             owner:'tamakomugi',  founded:'2026/09/22', sector:'大手私鉄',     sales:9725,  profit:1556,  basePrice:8550, opRatio:84},
+  {id:18, name:'長急電鉄',                 reading:'ながきゅうでんてつ',       owner:'tamakomugi',  founded:'2026/09/23', sector:'大手私鉄',     sales:10733, profit:1932,  basePrice:2100, opRatio:82},
+  {id:19, name:'長海みなとライン',         reading:'ながうみみなとらいん',     owner:'tamakomugi',  founded:'2026/09/23', sector:'一般私鉄',     sales:1121,  profit:191,   basePrice:5530, opRatio:83},
+  {id:23, name:'御川縣鐡',                 reading:'みかわけんてつ',           owner:'tamakomugi',  founded:'2026/09/23', sector:'一般私鉄',     sales:96,    profit:-1859, basePrice:9250, opRatio:2036},
+  {id:24, name:'東御鉄道',                 reading:'とうみてつどう',           owner:'tamakomugi',  founded:'2026/09/29', sector:'大手私鉄',     sales:6135,  profit:491,   basePrice:2620, opRatio:92},
+  {id:25, name:'鶴長急行鉄道',             reading:'つるながきゅうこうてつどう', owner:'tamakomugi', founded:'2026/09/29', sector:'大手私鉄',     sales:5028,  profit:553,   basePrice:8040, opRatio:89},
+  {id:26, name:'白風連絡鉄道',             reading:'しらかぜれんらくてつどう', owner:'tamakomugi',  founded:'2026/09/29', sector:'第三種事業者', sales:782,   profit:227,   basePrice:9010, opRatio:71},
+  {id:27, name:'東連合急行',               reading:'ひがしれんごうきゅうこう', owner:'tamakomugi',  founded:'2026/09/29', sector:'大手私鉄',     sales:5933,  profit:1009,  basePrice:1380, opRatio:83},
+];
+
+/* ===== 業種ごとの設定（PER・PSR・配当性向の基礎値・景気感応度β） ===== */
+const SECTOR = {
+  'テクノロジー': {per:25, psr:4.0, payout:0.15, beta:1.5},  // 景気に左右されやすい
+  '製造':         {per:12, psr:0.8, payout:0.35, beta:1.1},
+  '運輸':         {per:14, psr:1.2, payout:0.30, beta:1.0},
+  '大手私鉄':     {per:16, psr:1.5, payout:0.35, beta:0.4},  // 景気に左右されにくい
+  '一般私鉄':     {per:13, psr:1.2, payout:0.30, beta:0.5},
+  'SR':           {per:15, psr:1.8, payout:0.40, beta:0.3},
+  '第三種事業者': {per:12, psr:1.0, payout:0.30, beta:0.2},
+};
+const CFG = {
+  priceFloor:100, priceCap:12000,   // 株価の制限
+  peWeight:0.7,                     // 利益ベース時価総額の重み（残りは売上ベース）
+  lossPsDiscount:0.3,               // 赤字企業は売上ベースをこの係数で割り引く
+  payoutJitter:0.10,                // 配当性向のばらつき幅（±5ポイント）
+  lambda:0.08, mu:0.01, fundGain:0.25,
+  econGain:0.25,                    // 景気感応度の全体倍率（β に掛かる）
+};
+const P = {marginW:0.6, peW:0.7, showNeg:false, regime:'auto'};
+
+/* ===== 乱数（再現可能） ===== */
+let seed = 20261018;
+function rnd(){ seed|=0; seed=seed+0x6D2B79F5|0; let t=Math.imul(seed^seed>>>15,1|seed); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }
+function randn(){ let u=0,v=0; while(!u)u=rnd(); while(!v)v=rnd(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+// 企業ごとの固定乱数（シード式・0〜1）
+function seededUnit(n){ let t=(n|0)+0x6D2B79F5|0; t=Math.imul(t^t>>>15,1|t); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }
+
+/* ===== 状態・補助 ===== */
+const S = {view:'list', E:0, target:0, tick:0, stocks:[], idxHist:[100], selected:null, running:true, hold:false, hoverX:null};
+const $ = id => document.getElementById(id);
+const fmt = n => Math.round(n).toLocaleString('ja-JP');
+const fmt2 = n => n.toFixed(2);
+const pct = x => (x*100).toFixed(1)+'%';
+const signPct = x => (x>=0?'+':'')+(x*100).toFixed(1)+'%';
+const econLabel = E => E>=0.3 ? '好況' : E<=-0.3 ? '不況' : '通常';
+const scaleClass = s => s.sales>=10000 ? '大型' : s.sales>=3000 ? '中型' : '小型';
+const market = s => scaleClass(s)==='小型' ? 'スタンダード' : 'プライム';
+const kv = rows => rows.map(([k,v,cls])=>`<tr class="${cls||''}"><th>${k}</th><td>${v}</td></tr>`).join('');
+
+/* ===== 景気の自動調整 ===== */
+function stepEconomy(){
+  if(P.regime==='auto'){
+    if(rnd()<0.03) S.target=[0.6,0,-0.6][Math.floor(rnd()*3)];
+  } else {
+    S.target={boom:0.6,normal:0,bust:-0.6}[P.regime];
+  }
+  S.E = Math.max(-1, Math.min(1, S.E + 0.15*(S.target - S.E) + 0.06*randn()));
+}
+
+/* ===== 需要・適正株価（業種の景気感応度 β を使用） ===== */
+function signals(s, E){
+  s.fair   = s.base * Math.exp(CFG.fundGain*s.c + s.beta*CFG.econGain*E);
+  s.gap    = Math.log(s.fair / s.price);
+  s.cyc    = s.beta * E;
+  s.raw    = 0.5*s.c + 0.5*s.cyc + 0.8*s.gap;
+  s.demand = 50 + 50*Math.tanh(s.raw);
+}
+
+/* ===== 時価総額の推定（売上・利益・業種倍率から） ===== */
+function estimateMarketCap(s){
+  const pe = s.profit>0 ? s.profit*s.sec.per : 0;
+  const ps = s.sales*s.sec.psr;
+  const w  = s.profit>0 ? P.peW : 0;
+  const mcN = s.profit>0 ? w*pe + (1-w)*ps : CFG.lossPsDiscount*ps;
+  return {pe, ps, w, mcN};
+}
+
+/* ===== 配当性向（業種の基礎値 ＋ 企業ごとのシード式乱数） ===== */
+function payoutFor(s){
+  const jitter = (seededUnit(20261018 + s.id*7919) - 0.5) * CFG.payoutJitter;
+  return Math.min(0.9, Math.max(0.05, s.sec.payout + jitter));
+}
+
+/* ===== 配当の推定（利益 × 配当性向） ===== */
+function estimateDividend(s){
+  const total = s.profit>0 ? s.profit*s.payout : 0;   // 年間配当総額（億CP）
+  const dps = total / s.shares;                        // 1株配当（CP）＝億CP÷億株
+  return {total, dps};
+}
+
+/* ===== 銘柄の初期化 ===== */
+function buildStocks(){
+  const list = COMPANIES
+    .filter(c => P.showNeg || c.profit > 0)
+    .map(c => ({...c, sec: SECTOR[c.sector], beta: SECTOR[c.sector].beta, margin: Math.max(-0.5, Math.min(0.5, c.profit/c.sales))}));
+  const n = list.length, wM = P.marginW, wS = 1 - P.marginW;
+  const byM = [...list].sort((a,b)=>a.margin-b.margin);
+  const byS = [...list].sort((a,b)=>a.sales-b.sales);
+
+  list.forEach(s=>{
+    s.est = estimateMarketCap(s);
+    s.pm = byM.indexOf(s)/Math.max(n-1,1);
+    s.ps = byS.indexOf(s)/Math.max(n-1,1);
+    s.c  = ((wM*s.pm + wS*s.ps) - 0.5) * 2;             // 構造的な強さ -1〜+1
+    s.base   = s.basePrice;                              // 収録済みの基準株価
+    s.shares = s.est.mcN / s.base;                       // 発行株式数（億株）＝推定時価総額÷基準株価
+    s.price = s.price0 = Math.min(CFG.priceCap, s.base * Math.exp(CFG.fundGain*s.c));
+    s.mc = s.price * s.shares;
+    s.payout = payoutFor(s);
+    s.div = estimateDividend(s);
+    s.sigma = 0.006*s.beta + 0.004;
+    s.hist = [s.price];
+    s.ret = 0; s.prev = s.price;
+  });
+  S.stocks = list;
+  S.stocks.forEach(s => signals(s, S.E));
+  if(!list.find(s=>s.id===S.selected)) S.selected = list[0]?.id ?? null;
+}
+
+function indexValue(){
+  let num=0, den=0;
+  S.stocks.forEach(s=>{ num += s.sales * s.price/s.price0; den += s.sales; });
+  return den ? num/den*100 : 100;
+}
+function totalMc(){ return S.stocks.reduce((a,s)=>a+s.mc,0); }
+const yieldOf = s => s.div.dps / s.price;   // 配当利回り
+
+/* ===== 1日進める ===== */
+function stepStocks(){
+  stepEconomy();
+  S.stocks.forEach(s=>{
+    signals(s, S.E);
+    const ret = CFG.lambda*s.gap + CFG.mu*s.raw + s.sigma*randn();
+    s.prev = s.price;
+    s.price = Math.min(CFG.priceCap, Math.max(CFG.priceFloor, s.price*Math.exp(ret)));
+    s.ret = s.price/s.prev - 1;
+    s.mc = s.price * s.shares;
+    signals(s, S.E);
+    s.hist.push(s.price); if(s.hist.length>300) s.hist.shift();
+  });
+  S.tick++;
+  S.idxHist.push(indexValue()); if(S.idxHist.length>300) S.idxHist.shift();
+}
+
+/* ===== 業種別の景気感応度スライダー ===== */
+function buildSensPanel(){
+  const secs = [...new Set(COMPANIES.map(c=>c.sector))].filter(x=>SECTOR[x]);
+  $('sensPanel').innerHTML = secs.map(sec=>`
+    <label>${sec}　<b data-val="${sec}">${SECTOR[sec].beta.toFixed(1)}</b>
+      <input type="range" min="0" max="20" value="${Math.round(SECTOR[sec].beta*10)}" data-sec="${sec}">
+    </label>`).join('');
+}
+$('sensPanel').addEventListener('input', e=>{
+  const sec = e.target.dataset.sec; if(!sec) return;
+  const beta = +e.target.value/10;
+  SECTOR[sec].beta = beta;
+  document.querySelector(`[data-val="${sec}"]`).textContent = beta.toFixed(1);
+  S.stocks.forEach(s=>{
+    if(s.sector===sec){ s.beta = beta; s.sigma = 0.006*beta + 0.004; }
+  });
+  S.stocks.forEach(s=>signals(s,S.E));
+  render();
+});
+
+/* ===== 一覧（行は一度だけ作り、以後は中身だけ更新） ===== */
+function buildTable(){
+  $('tbody').innerHTML = '';
+  S.stocks.forEach(s=>{
+    const tr = document.createElement('tr');
+    tr.dataset.id = s.id;
+    tr.innerHTML = `
+      <td class="l">${s.name}</td>
+      <td class="l muted">${s.sector}</td>
+      <td class="c-price"></td>
+      <td class="c-mc"></td>
+      <td class="c-mkt"></td>
+      <td class="c-dps"></td>
+      <td class="c-yld"></td>
+      <td class="c-ret"></td>
+      <td><span class="c-dem"></span><span class="bar"><i class="c-bar"></i></span></td>
+      <td>${fmt(s.sales)}</td>
+      <td>${fmt(s.profit)}</td>
+      <td>${pct(s.profit/s.sales)}</td>
+      <td>${s.opRatio ?? '-'}</td>
+      <td><button class="sub" data-detail="${s.id}">詳細を見る</button></td>`;
+    const m = tr.querySelector('.c-mkt');
+    m.textContent = market(s);
+    m.className = 'c-mkt ' + (market(s)==='プライム' ? 'mkt-p' : 'mkt-s');
+    tr.querySelector('.c-dps').textContent = fmt2(s.div.dps);
+    s.tr = tr;
+    $('tbody').appendChild(tr);
+  });
+}
+
+function updateTable(){
+  S.stocks.forEach(s=>{
+    const r = s.tr;
+    r.querySelector('.c-price').textContent = fmt2(s.price);
+    r.querySelector('.c-mc').textContent = fmt(s.mc);
+    r.querySelector('.c-yld').textContent = (yieldOf(s)*100).toFixed(2)+'%';
+    const ret = r.querySelector('.c-ret');
+    ret.textContent = (s.ret*100).toFixed(2)+'%';
+    ret.className = 'c-ret ' + (s.ret>=0?'up':'down');
+    r.querySelector('.c-dem').textContent = s.demand.toFixed(0);
+    r.querySelector('.c-bar').style.width = s.demand+'%';
+  });
+  // 押下中は並べ替えない（クリック対象を動かさないため）
+  if(!S.hold){
+    [...S.stocks].sort((a,b)=>b.demand-a.demand).forEach(s=>$('tbody').appendChild(s.tr));
+  }
+}
+
+/* ===== 詳細 ===== */
+function renderDetail(){
+  const s = S.stocks.find(x=>x.id===S.selected);
+  if(!s){ showView('list'); return; }
+  const ranked = [...S.stocks].sort((a,b)=>b.mc-a.mc);
+  const rank = ranked.findIndex(x=>x.id===s.id)+1;
+  const upMove = Math.exp(s.beta*CFG.econGain) - 1;
+  const dnMove = Math.exp(-s.beta*CFG.econGain) - 1;
+
+  $('dName').textContent = s.name;
+  $('dReading').textContent = `${s.reading}　｜　${s.sector}`;
+  $('dData').innerHTML = kv([
+    ['所有者', s.owner],
+    ['設立日', s.founded],
+    ['業種', s.sector],
+    ...(s.region!==undefined ? [['SR地域番号', s.region]] : []),
+    ['規模区分', scaleClass(s)],
+    ['上場市場', market(s)],
+    ['売上（億CP）', fmt(s.sales)],
+    ['利益（億CP）', fmt(s.profit)],
+    ['利益率', pct(s.profit/s.sales)],
+    ['営業係数', s.opRatio ?? 'データなし'],
+    ['景気感応度 β（業種設定）', s.beta.toFixed(1), 'total'],
+    ['景気が好況（+1）のときの適正株価', signPct(upMove), upMove>=0?'up':'down'],
+    ['景気が不況（-1）のときの適正株価', signPct(dnMove), dnMove>=0?'up':'down'],
+  ]);
+
+  $('dPrice').textContent = fmt2(s.price);
+  $('dMc').textContent = fmt(s.mc);
+  $('dDiv').textContent = `${fmt2(s.div.dps)} ／ ${(yieldOf(s)*100).toFixed(2)}%`;
+  $('dMarket').textContent = `${market(s)} ／ ${rank}位`;
+
+  const e = s.est;
+  $('dEst').innerHTML = kv([
+    [`利益 × PER（業種の目安 ${s.sec.per}倍）`, s.profit>0 ? fmt(e.pe)+' 億CP' : '赤字のため使用せず'],
+    [`売上 × PSR（業種の目安 ${s.sec.psr}倍）`, fmt(e.ps)+' 億CP'],
+    ['合成の重み（利益ベース / 売上ベース）', s.profit>0 ? `${Math.round(e.w*100)}% / ${Math.round((1-e.w)*100)}%` : `売上のみ（割引 ×${CFG.lossPsDiscount}）`],
+    ['推定時価総額（中立）', fmt(e.mcN)+' 億CP', 'total'],
+    ['基準株価（収録値）', fmt2(s.base)+' CP'],
+    ['発行株式数（推定時価総額÷基準株価）', s.shares.toFixed(2)+' 億株'],
+    ['現在の時価総額（景気・需要反映後）', fmt(s.mc)+' 億CP', 'total'],
+  ]);
+
+  $('dDivTbl').innerHTML = kv([
+    ['配当性向（業種の基礎値 ＋ 企業ごとのばらつき）', `${(s.payout*100).toFixed(1)}%（基礎 ${(s.sec.payout*100).toFixed(0)}%）`],
+    ['年間配当総額（利益 × 配当性向）', s.profit>0 ? fmt(s.div.total)+' 億CP' : '赤字のため無配'],
+    ['1株配当', fmt2(s.div.dps)+' CP', 'total'],
+    ['配当利回り（現在株価ベース）', (yieldOf(s)*100).toFixed(2)+'%', 'total'],
+  ]);
+
+  const parts = [
+    ['構造的な強さ（利益率・規模）', 0.5*s.c],
+    ['景気の影響（β × 景気）',        0.5*s.cyc],
+    ['割安度（適正株価との乖離）',    0.8*s.gap],
+  ];
+  $('dBreak').innerHTML = kv(parts.map(([k,v])=>[k, (v>=0?'+':'')+v.toFixed(2), v>=0?'up':'down']))
+    + kv([['合計（tanh前）', s.raw.toFixed(2), 'total'], ['需要スコア', s.demand.toFixed(1), 'total']]);
+
+  drawChart(s);
+}
+
+/* ===== チャート（カーソル位置の株価を表示） ===== */
+function drawChart(s){
+  const c = $('chart'), dpr = window.devicePixelRatio||1;
+  const w = c.clientWidth, h = c.clientHeight;
+  if(!w) return;
+  c.width = w*dpr; c.height = h*dpr;
+  const g = c.getContext('2d');
+  g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,w,h);
+
+  const a = s.hist.map(v=>v/s.price0*100);
+  const b = S.idxHist.slice(-a.length);
+  const all = [...a,...b,100];
+  const min = Math.min(...all)*0.97, max = Math.max(...all)*1.03;
+  const X = i => a.length<2 ? w/2 : 6 + i/(a.length-1)*(w-12);
+  const Y = v => h-8 - (v-min)/(max-min||1)*(h-16);
+  const color = a[a.length-1]>=100 ? '#34c77b' : '#ff5c6c';
+  const line = (arr,col,width)=>{
+    g.beginPath();
+    arr.forEach((v,i)=> i ? g.lineTo(X(i),Y(v)) : g.moveTo(X(i),Y(v)));
+    g.strokeStyle=col; g.lineWidth=width; g.stroke();
+  };
+  g.strokeStyle='#2a333d'; g.lineWidth=1;
+  g.beginPath(); g.moveTo(0,Y(100)); g.lineTo(w,Y(100)); g.stroke();
+  line(b,'#8a95a3',1.5);
+  line(a, color, 2);
+  g.fillStyle='#8a95a3'; g.font='11px sans-serif';
+  g.fillText('基準=100（開始時）', 8, 14);
+
+  // カーソル位置の表示
+  if(S.hoverX!=null && a.length>0){
+    const ratio = (S.hoverX-6)/(w-12);
+    const i = Math.max(0, Math.min(a.length-1, Math.round(ratio*(a.length-1))));
+    const x = X(i);
+    const day = S.tick - (a.length-1-i);          // 経過日数（0 = 開始日）
+    const price = s.hist[i];
+    const chg = a[i]-100;
+
+    g.strokeStyle='#e6e9ee'; g.lineWidth=1; g.setLineDash([4,4]);
+    g.beginPath(); g.moveTo(x,0); g.lineTo(x,h); g.stroke(); g.setLineDash([]);
+    g.fillStyle=color; g.beginPath(); g.arc(x,Y(a[i]),4,0,Math.PI*2); g.fill();
+    g.fillStyle='#8a95a3'; g.beginPath(); g.arc(x,Y(b[i]),3,0,Math.PI*2); g.fill();
+
+    const lines = [
+      day===S.tick ? `経過 ${day} 日（現在）` : `経過 ${day} 日`,
+      `株価　${fmt2(price)} CP`,
+      `開始比　${chg>=0?'+':''}${chg.toFixed(1)}%`,
+      `市場指数　${b[i].toFixed(1)}`,
+    ];
+    const bw = 150, bh = 16*lines.length + 14;
+    const bx = x > w/2 ? x - bw - 12 : x + 12;
+    const by = 8;
+    g.fillStyle='rgba(23,30,38,0.95)'; g.strokeStyle='#2a333d';
+    g.beginPath(); g.roundRect ? g.roundRect(bx,by,bw,bh,6) : g.rect(bx,by,bw,bh); g.fill(); g.stroke();
+    g.font='12px sans-serif';
+    lines.forEach((t,k)=>{
+      g.fillStyle = (k===1 || k===2) ? color : '#e6e9ee';
+      g.fillText(t, bx+10, by+18+k*16);
+    });
+  }
+}
+
+/* ===== 描画・画面切替 ===== */
+function renderHeader(){
+  $('kE').textContent = (S.E>=0?'+':'') + S.E.toFixed(2);
+  $('kLabel').textContent = econLabel(S.E);
+  $('kIdx').textContent = indexValue().toFixed(1);
+  $('kTotal').textContent = fmt(totalMc());
+  $('kTick').textContent = S.tick;
+  $('gaugeMark').style.left = ((S.E+1)/2*100) + '%';
+}
+
+function render(){
+  renderHeader();
+  if(S.view==='list') updateTable();
+  else renderDetail();
+}
+
+function showView(v){
+  S.view = v;
+  S.hoverX = null;
+  $('viewList').hidden = v!=='list';
+  $('viewDetail').hidden = v!=='detail';
+  window.scrollTo(0,0);
+  render();
+}
+
+/* ===== 制御 ===== */
+function init(){
+  seed = 20261018; S.E = 0; S.target = 0; S.tick = 0; S.idxHist = [100];
+  buildStocks(); buildTable(); render();
+}
+let timer=null, speed=3;
+function restartTimer(){
+  clearInterval(timer);
+  timer = setInterval(()=>{ if(S.running){ stepStocks(); render(); } }, 1000/speed);
+}
+
+// 一覧の「詳細を見る」
+$('tbody').addEventListener('click', e=>{
+  const btn = e.target.closest('[data-detail]'); if(!btn) return;
+  S.selected = +btn.dataset.detail;
+  showView('detail');
+});
+// 押下中は並べ替えを止める
+const releaseHold = ()=>{ S.hold = false; };
+$('tbody').addEventListener('pointerdown', ()=>{ S.hold = true; });
+document.addEventListener('pointerup', releaseHold);
+document.addEventListener('pointercancel', releaseHold);
+
+// チャートのカーソル操作
+const chartEl = $('chart');
+const moveOnChart = e=>{
+  const r = chartEl.getBoundingClientRect();
+  S.hoverX = e.clientX - r.left;
+  const s = S.stocks.find(x=>x.id===S.selected);
+  if(s) drawChart(s);
+};
+chartEl.addEventListener('pointermove', moveOnChart);
+chartEl.addEventListener('pointerdown', moveOnChart);
+chartEl.addEventListener('pointerleave', ()=>{
+  S.hoverX = null;
+  const s = S.stocks.find(x=>x.id===S.selected);
+  if(s) drawChart(s);
+});
+
+$('btnBack').onclick = ()=> showView('list');
+$('btnPlay').onclick = ()=>{ S.running=!S.running; $('btnPlay').textContent = S.running?'一時停止':'再生'; };
+$('btnStep').onclick = ()=>{ S.running=false; $('btnPlay').textContent='再生'; stepStocks(); render(); };
+$('btnReset').onclick = init;
+$('speed').oninput = e=>{ speed=+e.target.value; $('speedLbl').textContent = speed+' 日/秒'; restartTimer(); };
+$('regime').onchange = e=>{ P.regime = e.target.value; };
+$('econGain').oninput = e=>{ CFG.econGain = +e.target.value/100; $('econLbl').textContent = CFG.econGain.toFixed(2); S.stocks.forEach(s=>signals(s,S.E)); render(); };
+$('marginW').oninput = e=>{ P.marginW = +e.target.value/100; $('marginLbl').textContent = e.target.value+'%'; init(); };
+$('peW').oninput = e=>{ P.peW = +e.target.value/100; $('peLbl').textContent = e.target.value+'%'; init(); };
+$('showNeg').onchange = e=>{ P.showNeg = e.target.checked; init(); };
+window.addEventListener('resize', ()=>{ if(S.view==='detail') renderDetail(); });
+
+buildSensPanel();
+init();
+restartTimer();
+</script>
+</body>
+</html>
