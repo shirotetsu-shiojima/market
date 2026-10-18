@@ -87,7 +87,6 @@ canvas{width:100%;height:280px;display:block;background:#0c1116;border-radius:8p
 <section id="viewList">
   <div class="ctrl">
     <span class="note status" id="status"></span>
-    <button id="btnRefresh" class="sub">最新に更新</button>
   </div>
 
   <div class="listwrap">
@@ -181,7 +180,6 @@ canvas{width:100%;height:280px;display:block;background:#0c1116;border-radius:8p
 const SB_URL = 'https://klptykychxhzdytjxrqw.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtscHR5a3ljaHhoemR5dGp4cnF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIzMDU5MzcsImV4cCI6MjEwNzg4MTkzN30.2xhygqwxoXjcWA6G5wJC9C077AadCK4zw34Hi69iV7M';
 const WINDOW = 300;                  // 表示・保存する時間数（サーバーの window_hours と一致させる）
-const REFRESH_MS = 5 * 60 * 1000;    // 画面を開いたままの場合の再取得間隔
 
 /* ===== 業種ごとの表示用パラメータ（計算エンジン sim-engine.ts と一致させること） ===== */
 const SECTOR = {
@@ -734,13 +732,18 @@ const leaveChart = ()=>{
 });
 
 $('btnBack').onclick = ()=> showView('list');
-$('btnRefresh').onclick = ()=> loadAll();
 window.addEventListener('resize', ()=>{ if(S.view==='detail') renderDetail(); });
-document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) loadAll(); });
 
-// 初回読み込み（追いつき計算 → 表示）と定期更新
+// 毎時0分30秒に自動取得（JST と UTC は整数時間差のため、毎時の区切りは同じ）
+function scheduleHourly(){
+  const now = Date.now();
+  const next = Math.floor(now / 3600000) * 3600000 + 3600000 + 30000;
+  setTimeout(()=>{ loadAll(); scheduleHourly(); }, next - now);
+}
+
+// 読み込み時に取得（追いつき計算 → 表示）し、その後は毎時0分30秒ごとに取得
 loadAll();
-setInterval(loadAll, REFRESH_MS);
+scheduleHourly();
 </script>
 </body>
 </html>
